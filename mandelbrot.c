@@ -1,10 +1,10 @@
 /*
  * Number of virtual cores on my machine: 4
  * Computer times:
- *          ------ 1 Thread: 
- *          ------ 2 Threads: 
- *          ------ 4 Threads: 
- *          ------ 8 Threads: 
+ *          ------ 1 Thread:   46.507256 seconds
+ *          ------ 2 Threads:  27.565924 seconds
+ *          ------ 4 Threads:  23.918588 seconds
+ *          ------ 8 Threads:  23.939045 seconds
  *
 */
 
@@ -16,7 +16,7 @@
 
   Compile the program with:
 
-  gcc -o mandelbrot -O4 mandelbrot.c
+  gcc -o mandelbrot -O4 mandelbrot.c -fopenmp
 
   Usage:
  
@@ -47,6 +47,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
+#include <omp.h>
 
 int main(int argc, char* argv[])
 {
@@ -86,43 +87,53 @@ int main(int argc, char* argv[])
   double u, v; /* Coordinates of the iterated point. */
   int i,j; /* Pixel counters */
   int k; /* Iteration counter */
-  for (j = 0; j < yres; j++) {
-    y = ymax - j * dy;
-    for(i = 0; i < xres; i++) {
-      double u = 0.0;
-      double v= 0.0;
-      double u2 = u * u;
-      double v2 = v*v;
-      x = xmin + i * dx;
-      /* iterate the point */
-      for (k = 1; k < maxiter && (u2 + v2 < 4.0); k++) {
-            v = 2 * u * v + y;
-            u = u2 - v2 + x;
-            u2 = u * u;
-            v2 = v * v;
-      };
-      /* compute  pixel color and write it to file */
-      if (k >= maxiter) {
-        /* interior */
-        const unsigned char black[] = {0, 0, 0, 0, 0, 0};
-        //fwrite (black, 6, 1, fp);
-        memcpy(imgStorage + offset, black, 6);
-        offset += 6;
-      }
-      else {
-        /* exterior */
-        unsigned char color[6];
-        color[0] = k >> 8;
-        color[1] = k & 255;
-        color[2] = k >> 8;
-        color[3] = k & 255;
-        color[4] = k >> 8;
-        color[5] = k & 255;
-        //fwrite(color, 6, 1, fp);
-        memcpy(imgStorage + offset, color, 6);
-        offset += 6;
-      };
+  double start, end;
+
+  #pragma omp parallel private(i)
+  start = omp_get_wtime(); 
+  omp_set_num_threads(8);
+  {
+    #pragma omp for
+    for (j = 0; j < yres; j++) {
+        y = ymax - j * dy;
+        for(i = 0; i < xres; i++) {
+        double u = 0.0;
+        double v= 0.0;
+        double u2 = u * u;
+        double v2 = v*v;
+        x = xmin + i * dx;
+        /* iterate the point */
+        for (k = 1; k < maxiter && (u2 + v2 < 4.0); k++) {
+                v = 2 * u * v + y;
+                u = u2 - v2 + x;
+                u2 = u * u;
+                v2 = v * v;
+        };
+        /* compute  pixel color and write it to file */
+        if (k >= maxiter) {
+            /* interior */
+            const unsigned char black[] = {0, 0, 0, 0, 0, 0};
+            //fwrite (black, 6, 1, fp);
+            memcpy(imgStorage + offset, black, 6);
+            offset += 6;
+        }
+        else {
+            /* exterior */
+            unsigned char color[6];
+            color[0] = k >> 8;
+            color[1] = k & 255;
+            color[2] = k >> 8;
+            color[3] = k & 255;
+            color[4] = k >> 8;
+            color[5] = k & 255;
+            //fwrite(color, 6, 1, fp);
+            memcpy(imgStorage + offset, color, 6);
+            offset += 6;
+        };
+        }
     }
+  end = omp_get_wtime();
+  printf("Work took %f seconds\n", end - start); 
   }
   /* Open the file and write the header. */
   FILE * fp = fopen(filename,"wb");
